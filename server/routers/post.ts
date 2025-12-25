@@ -1,4 +1,3 @@
-
 import { z } from "zod";
 import { createTRPCRouter, publicProcedure } from "../trpc";
 import { posts, postsToCategories, categories } from "@/db/schema";
@@ -6,14 +5,13 @@ import { eq, desc } from "drizzle-orm";
 import { generateSlug } from "@/utils/slug";
 
 export const postRouter = createTRPCRouter({
-
   create: publicProcedure
     .input(
       z.object({
         title: z.string().min(1),
         content: z.string().min(1),
         published: z.boolean().default(false),
-        imageUrl: z.string().optional(),    
+        imageUrl: z.string().optional(),
         categoryIds: z.array(z.number()).optional(),
       })
     )
@@ -79,11 +77,28 @@ export const postRouter = createTRPCRouter({
       });
     }),
 
+  // GET POST BY SLUG
   getBySlug: publicProcedure
     .input(z.object({ slug: z.string() }))
     .query(async ({ ctx, input }) => {
       return ctx.db.query.posts.findFirst({
         where: eq(posts.slug, input.slug),
+        with: {
+          postsToCategories: {
+            with: {
+              category: true,
+            },
+          },
+        },
+      });
+    }),
+
+  // GET POST BY ID
+  getById: publicProcedure
+    .input(z.object({ id: z.number() }))
+    .query(async ({ ctx, input }) => {
+      return ctx.db.query.posts.findFirst({
+        where: eq(posts.id, input.id),
         with: {
           postsToCategories: {
             with: {
@@ -108,7 +123,6 @@ export const postRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       const { id, categoryIds, ...data } = input;
 
-      // 1. Update post
       await ctx.db
         .update(posts)
         .set({
@@ -117,7 +131,6 @@ export const postRouter = createTRPCRouter({
         })
         .where(eq(posts.id, id));
 
-      // 2. Reset categories
       await ctx.db
         .delete(postsToCategories)
         .where(eq(postsToCategories.postId, id));
@@ -131,7 +144,6 @@ export const postRouter = createTRPCRouter({
         );
       }
 
-      // 3. Return updated post
       return ctx.db.query.posts.findFirst({
         where: eq(posts.id, id),
         with: {
